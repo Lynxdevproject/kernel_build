@@ -1,23 +1,30 @@
 name: Build MikaKernel
 
-
 on:
-  workflow_dispatch:
-
+  repository_dispatch:
+    types: [kernel_build]
 
 jobs:
   build-kernel:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
+
+      - name: Inject config.env from bot payload
+        run: |
+          echo "$CONFIG_STRING" > config.env
+        env:
+          CONFIG_STRING: ${{ github.event.client_payload.CONFIG_STRING }}
+
       - name: Setup environment
         run: |
-          echo "ANYKERNEL_SOURCE=$(cat config.env | grep -w "ANYKERNEL_SOURCE" | head -n 1 | cut -d "=" -f 2)" >> $GITHUB_ENV
-          echo "ANYKERNEL_SOURCE_BRANCH=$(cat config.env | grep -w "ANYKERNEL_SOURCE_BRANCH" | head -n 1 | cut -d "=" -f 2)" >> $GITHUB_ENV
-          echo "KERNEL_SOURCE=$(cat config.env | grep -w "KERNEL_SOURCE" | head -n 1 | cut -d "=" -f 2)" >> $GITHUB_ENV
-          echo "KERNEL_SOURCE_BRANCH=$(cat config.env | grep -w "KERNEL_SOURCE_BRANCH" | head -n 1 | cut -d "=" -f 2)" >> $GITHUB_ENV
-          echo "KERNEL_CONFIG=$(cat config.env | grep -w "KERNEL_CONFIG" | head -n 1 | cut -d "=" -f 2)" >> $GITHUB_ENV
-          echo "BUILD_ARGS=$(cat config.env | grep -w "BUILD_ARGS" | head -n 1 | cut -d ":" -f 2)" >> $GITHUB_ENV
+          echo "ANYKERNEL_SOURCE=$(grep -w ANYKERNEL_SOURCE config.env | cut -d '=' -f2)" >> $GITHUB_ENV
+          echo "ANYKERNEL_SOURCE_BRANCH=$(grep -w ANYKERNEL_SOURCE_BRANCH config.env | cut -d '=' -f2)" >> $GITHUB_ENV
+          echo "KERNEL_SOURCE=$(grep -w KERNEL_SOURCE config.env | cut -d '=' -f2)" >> $GITHUB_ENV
+          echo "KERNEL_SOURCE_BRANCH=$(grep -w KERNEL_SOURCE_BRANCH config.env | cut -d '=' -f2)" >> $GITHUB_ENV
+          echo "KERNEL_CONFIG=$(grep -w KERNEL_CONFIG config.env | cut -d '=' -f2)" >> $GITHUB_ENV
+          echo "BUILD_ARGS=$(grep -w BUILD_ARGS config.env | cut -d ':' -f2 || echo '')" >> $GITHUB_ENV
 
       - name: Pull toolchain
         run: |
@@ -33,32 +40,18 @@ jobs:
         run: |
           export KBUILD_BUILD_USER="zclkkk"
           export KBUILD_BUILD_HOST="workspace"
-          export PATH=$GITHUB_WORKSPACE/clang/bin:${PATH}
-          args="                  ARCH=arm64 \
-                                  O=../out \
-                                  ${{ env.BUILD_ARGS }} \
-                                  CLANG_TRIPLE=aarch64-linux-gnu- \
-                                  CROSS_COMPILE=$GITHUB_WORKSPACE/aarch64-linux-android-4.9/bin/aarch64-linux-android- \
-                                  CROSS_COMPILE_ARM32=$GITHUB_WORKSPACE/arm-linux-androideabi-4.9/bin/arm-linux-androideabi- "
+          export PATH=$GITHUB_WORKSPACE/clang/bin:$PATH
+          args="ARCH=arm64 O=../out ${{ env.BUILD_ARGS }} CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=$GITHUB_WORKSPACE/aarch64-linux-android-4.9/bin/aarch64-linux-android- CROSS_COMPILE_ARM32=$GITHUB_WORKSPACE/arm-linux-androideabi-4.9/bin/arm-linux-androideabi-"
           cd kernel-source
           make ${args} ${{ env.KERNEL_CONFIG }}
           make -j$(($(getconf _NPROCESSORS_ONLN) * 2)) ${args}
 
       - name: Package kernel
         run: |
-          git clone --depth=1 ${{ env.ANYKERNEL_SOURCE }} -b ${{ env.ANYKERNEL_SOURCE_BRANCH }} AnyKernel3 && rm -rf AnyKernel3/.git AnyKernel3/.github AnyKernel3/LICENSE AnyKernel3/README.md
-          if [[ -f out/arch/arm64/boot/Image.gz-dtb ]]; then
-            cp out/arch/arm64/boot/Image.gz-dtb AnyKernel3/Image.gz-dtb
-          elif [[ -f out/arch/arm64/boot/Image-dtb ]]; then
-            cp out/arch/arm64/boot/Image-dtb AnyKernel3/Image-dtb
-          elif [[ -f out/arch/arm64/boot/Image.gz ]]; then
-            cp out/arch/arm64/boot/Image.gz AnyKernel3/Image.gz
-          elif [[ -f out/arch/arm64/boot/Image ]]; then
-            cp out/arch/arm64/boot/Image AnyKernel3/Image
-          fi
-          if [ -f out/arch/arm64/boot/dtbo.img ]; then
-            cp out/arch/arm64/boot/dtbo.img AnyKernel3/dtbo.img
-          fi
+          git clone --depth=1 ${{ env.ANYKERNEL_SOURCE }} -b ${{ env.ANYKERNEL_SOURCE_BRANCH }} AnyKernel3
+          rm -rf AnyKernel3/.git AnyKernel3/.github AnyKernel3/LICENSE AnyKernel3/README.md
+          cp out/arch/arm64/boot/*Image* AnyKernel3/ || true
+          cp out/arch/arm64/boot/dtbo.img AnyKernel3/dtbo.img || true
 
       - name: Upload kernel to artifact
         uses: actions/upload-artifact@v4
