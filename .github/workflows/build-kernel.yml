@@ -23,6 +23,7 @@ jobs:
           echo "KERNEL_SOURCE_BRANCH=$(cat config.env | grep -w "KERNEL_SOURCE_BRANCH" | head -n 1 | cut -d "=" -f 2)" >> $GITHUB_ENV
           echo "KERNEL_CONFIG=$(cat config.env | grep -w "KERNEL_CONFIG" | head -n 1 | cut -d "=" -f 2)" >> $GITHUB_ENV
           echo "BUILD_ARGS=$(cat config.env | grep -w "BUILD_ARGS" | head -n 1 | cut -d ":" -f 2)" >> $GITHUB_ENV
+          echo "KERNEL_OUTPUT_NAME=$(cat config.env | grep -w "KERNEL_OUTPUT_NAME" | head -n 1 | cut -d "=" -f 2)" >> $GITHUB_ENV
 
       - name: 🏗️ Pull Toolchain
         run: |
@@ -65,13 +66,8 @@ jobs:
             cp out/arch/arm64/boot/dtbo.img AnyKernel3/dtbo.img
           fi
 
-      - name: 🧪 Tentukan Nama Output Berdasarkan Defconfig
-        run: |
-          CONFIG_NAME=$(echo "${{ env.KERNEL_CONFIG }}" | cut -d "_" -f1)
-          echo "OUTPUT_NAME=${CONFIG_NAME}_kernel" >> $GITHUB_ENV
-
       - name: 📤 Upload Kernel Output
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.OUTPUT_NAME }}
+          name: ${{ env.KERNEL_OUTPUT_NAME }}
           path: AnyKernel3/*
